@@ -96,6 +96,10 @@ struct bpb33* check_bootsector(uint8_t *image_buf)
     struct byte_bpb33* bpb;  /* BIOS parameter block */
     struct bpb33* bpb_aligned;
 
+#ifdef DEBUG
+    fprintf(stderr, "Size of BPB: %lu\n", sizeof(struct bootsector33));
+#endif
+
     bootsect = (struct bootsector33*)image_buf;
     if (bootsect->bsJump[0] == 0xe9 ||
 	(bootsect->bsJump[0] == 0xeb && bootsect->bsJump[2] == 0x90)) 
