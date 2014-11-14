@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     image_buf = mmap_file(argv[1], &fd);
     bpb = check_bootsector(image_buf);
 
-
+    // your code should start here...
 
 
 
