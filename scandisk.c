@@ -27,10 +27,10 @@ void usage(char *progname) {
 int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
     id++;
     uint16_t start_cluster = getushort(dirent->deStartCluster);
-    uint16_t prev_cluster = start_cluster;
     uint32_t size = getulong(dirent->deFileSize);
 	size = ((size+511)/512);
     uint16_t fat_entry = get_fat_entry(start_cluster, image_buf, bpb);
+    uint16_t prev_fat = fat_entry;
     int count = 1;
 
     // check case where file size is just 1
@@ -51,19 +51,21 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         }
         if (count >= size){
             uint16_t tmp = get_fat_entry(fat_entry, image_buf, bpb);
-			printf("c:%i, s:%i, Current FAT: %i // Prev: %i \n",count, size, fat_entry, prev_cluster);
-            
+			printf("c:%i, s:%i, Current FAT: %i // Prev: %i \n",count, size, fat_entry, prev_fat);
+            fflush(stdout);
             //unlink the previous entry with this entry.
             if (count==size){
 		        printf("Found something tooo big!\n");
 				fflush(stdout);
-		            set_fat_entry(prev_cluster, FAT12_MASK&CLUST_EOFE, image_buf, bpb);
+		        set_fat_entry(prev_fat, FAT12_MASK&CLUST_EOFE, image_buf, bpb);
+				assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFE));
             }
 
             //set the current cluster to free
             set_fat_entry(fat_entry, FAT12_MASK&CLUST_FREE, image_buf, bpb);
 			assert(get_fat_entry(fat_entry, image_buf, bpb)==0);
-            prev_cluster = fat_entry;
+			printf("Fixed!\n");
+            prev_fat = fat_entry;
             fat_entry = tmp;
             count++;
 
@@ -71,11 +73,15 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         else {
             //go to next entry
             cc[fat_entry] = id;
+			prev_fat = fat_entry;
             fat_entry = get_fat_entry(fat_entry, image_buf, bpb);
             count ++;
         }
     }
     //count++;
+	if (size>count){
+		printf("Metadata is bigger than cluster data\n");
+	}
 
     return count;
 /*
