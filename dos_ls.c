@@ -107,12 +107,12 @@ uint16_t print_dirent(struct direntry *dirent, int indent)
 
 	size = getulong(dirent->deFileSize);
 	print_indent(indent);
-	printf("%s.%s (%u bytes) (starting cluster %d) %c%c%c%c\n", 
-	       name, extension, size, getushort(dirent->deStartCluster),
-	       ro?'r':' ', 
-               hidden?'h':' ', 
-               sys?'s':' ', 
-               arch?'a':' ');
+	printf("%s.%s (%u bytes %d clusters) (starting cluster %d) %c%c%c%c\n", 
+               name, extension, size, ((size + 512 - 1) / 512),  getushort(dirent->deStartCluster),
+               ro?'r':' ', 
+                   hidden?'h':' ', 
+                   sys?'s':' ', 
+                   arch?'a':' ');
     }
 
     return followclust;
