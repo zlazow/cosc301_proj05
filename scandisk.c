@@ -54,7 +54,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
 			printf("c:%i, s:%i, Current FAT: %i // Prev: %i \n",count, size, fat_entry, prev_cluster);
             
             //unlink the previous entry with this entry.
-            if (count-size == 1){
+            if (count==size){
 		        printf("Found something tooo big!\n");
 				fflush(stdout);
 		            set_fat_entry(prev_cluster, FAT12_MASK&CLUST_EOFE, image_buf, bpb);
@@ -62,9 +62,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
 
             //set the current cluster to free
             set_fat_entry(fat_entry, FAT12_MASK&CLUST_FREE, image_buf, bpb);
-			printf("%i\n", get_fat_entry(fat_entry, image_buf, bpb));
-			printf("%i\n", get_fat_entry(prev_cluster, image_buf, bpb));
-			assert(get_fat_entry(fat_entry, image_buf, bpb) == (FAT12_MASK&CLUST_FREE));
+			assert(get_fat_entry(fat_entry, image_buf, bpb)==0);
             prev_cluster = fat_entry;
             fat_entry = tmp;
             count++;
