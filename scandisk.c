@@ -23,6 +23,24 @@ void usage(char *progname) {
     exit(1);
 }
 
+void fix_orphan(int start_cluster, struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
+	//traverse the fat table. count size. label all of them in cc. create directory entry.
+	id++;
+	cc[start_cluster] = id;
+	
+}
+
+void find_orphan(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
+	int count=0;
+	for (int i = 0 ; i<4096; i++){
+		if ((cc[i]<=0) && (get_fat_entry(i, image_buf, bpb)>0)){
+			printf("Orphan Detected!");
+			fix_orphan(i, dirent, image_buf, bpb);
+			count++;
+		}
+	}
+	printf("%i\n", count);
+}
 
 int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
     id++;
@@ -80,7 +98,10 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
     }
     //count++;
 	if (size>count){
-		printf("Metadata is bigger than cluster data\n");
+		printf("Metadata is bigger than cluster data -- adjusting metadata\n");
+		putulong(dirent->deFileSize, count*512);
+		printf("Should be fixed now\n");
+
 	}
 
     return count;
@@ -212,6 +233,7 @@ void traverse_root(uint8_t *image_buf, struct bpb33* bpb)
 
         dirent++;
     }
+	find_orphan(dirent, image_buf, bpb);
 }
 
 int main(int argc, char** argv) {
