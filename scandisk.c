@@ -50,13 +50,13 @@ void find_orphan(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
     for (int i = 2 ; i<2848; i++){
         if (cc[i]<=0){
             if (get_fat_entry(i, image_buf, bpb)!=0){
-                //printf("%i\n", get_fat_entry(i, image_buf, bpb));
+                printf("%i\n", get_fat_entry(i, image_buf, bpb));
                 fix_orphan(i, dirent, image_buf, bpb);
                 count++;
             }
         }
     }
-    //printf("%i\n", count);
+    printf("%i\n", count);
 }
 
 int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
@@ -249,7 +249,7 @@ void traverse_root(uint8_t *image_buf, struct bpb33* bpb)
 
         dirent++;
     }
-    find_orphan(dirent, image_buf, bpb);
+    //find_orphan(dirent, image_buf, bpb);
 }
 
 int main(int argc, char** argv) {
