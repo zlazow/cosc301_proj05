@@ -15,7 +15,7 @@
 #include "fat.h"
 #include "dos.h"
 
-int cc[4096] = {0};
+int cc[4096] = {0}; //from 2^12
 static int id = 0;
 
 void usage(char *progname) {
@@ -24,29 +24,46 @@ void usage(char *progname) {
 }
 
 void fix_orphan(int start_cluster, struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
-	//traverse the fat table. count size. label all of them in cc. create directory entry.
-	id++;
-	cc[start_cluster] = id;
-	
+
+    // make a new file in root
+    // creates if not there, otherwise opens it
+
+    FILE *fp = fopen("dumpster.dat", "w+");
+    printf("start cluster:%i\n", start_cluster);
+
+    uint16_t cluster = get_fat_entry(start_cluster, image_buf, bpb);
+
+    if (fp == NULL) {
+        fprintf(stderr, "Can't open dumpster file\n");
+        exit(1);
+    }
+    
+    fprintf(fp, "start cluster: %c\n", cluster);
+
+    id++;
+    cc[start_cluster] = id;
+    
 }
 
 void find_orphan(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
-	int count=0;
-	for (int i = 0 ; i<4096; i++){
-		if ((cc[i]<=0) && (get_fat_entry(i, image_buf, bpb)>0)){
-			printf("Orphan Detected!");
-			fix_orphan(i, dirent, image_buf, bpb);
-			count++;
-		}
-	}
-	printf("%i\n", count);
+    int count=0;
+    for (int i = 2 ; i<2848; i++){
+        if (cc[i]<=0){
+            if (get_fat_entry(i, image_buf, bpb)!=0){
+                //printf("%i\n", get_fat_entry(i, image_buf, bpb));
+                fix_orphan(i, dirent, image_buf, bpb);
+                count++;
+            }
+        }
+    }
+    //printf("%i\n", count);
 }
 
 int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
     id++;
     uint16_t start_cluster = getushort(dirent->deStartCluster);
     uint32_t size = getulong(dirent->deFileSize);
-	size = ((size+511)/512);
+    size = ((size+511)/512);
     uint16_t fat_entry = get_fat_entry(start_cluster, image_buf, bpb);
     uint16_t prev_fat = fat_entry;
     int count = 1;
@@ -69,21 +86,20 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         }
         if (count >= size){
             uint16_t tmp = get_fat_entry(fat_entry, image_buf, bpb);
-			printf("c:%i, s:%i, Current FAT: %i // Prev: %i \n",count, size, fat_entry, prev_fat);
-            fflush(stdout);
+
             //unlink the previous entry with this entry.
             if (count==size){
-		        printf("Found something tooo big!\n");
-				fflush(stdout);
-		        set_fat_entry(prev_fat, FAT12_MASK&CLUST_EOFE, image_buf, bpb);
-				assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFE));
+                printf("Found something tooo big!\n");
+                fflush(stdout);
+                set_fat_entry(prev_fat, FAT12_MASK&CLUST_EOFS, image_buf, bpb);
+                assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFS));
             }
 
             //set the current cluster to free
             set_fat_entry(fat_entry, FAT12_MASK&CLUST_FREE, image_buf, bpb);
-			assert(get_fat_entry(fat_entry, image_buf, bpb)==0);
-			printf("Fixed!\n");
-            prev_fat = fat_entry;
+            assert(get_fat_entry(fat_entry, image_buf, bpb)==0);
+            printf("Fixed!\n");
+            //prev_fat = fat_entry;
             fat_entry = tmp;
             count++;
 
@@ -91,18 +107,18 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         else {
             //go to next entry
             cc[fat_entry] = id;
-			prev_fat = fat_entry;
+            prev_fat = fat_entry;
             fat_entry = get_fat_entry(fat_entry, image_buf, bpb);
             count ++;
         }
     }
     //count++;
-	if (size>count){
-		printf("Metadata is bigger than cluster data -- adjusting metadata\n");
-		putulong(dirent->deFileSize, count*512);
-		printf("Should be fixed now\n");
+    if (size>count){
+        printf("Metadata is bigger than cluster data -- adjusting metadata\n");
+        putulong(dirent->deFileSize, count*512);
+        printf("Should be fixed now\n");
 
-	}
+    }
 
     return count;
 /*
@@ -185,7 +201,7 @@ uint16_t build_cc(struct direntry *dirent, struct bpb33 *bpb, uint8_t *image_buf
 
     size = getulong(dirent->deFileSize);
     int count = traverse_fat(dirent, image_buf, bpb);
-    if (count!=((size+511)/512)){
+    //if (count!=((size+511)/512)){
         printf("\t%s.%s (%u bytes %d clusters) (starting cluster %d) %c%c%c%c\n", 
                name, extension, size, ((size + 512 - 1) / 512),  getushort(dirent->deStartCluster),
                ro?'r':' ', 
@@ -193,7 +209,7 @@ uint16_t build_cc(struct direntry *dirent, struct bpb33 *bpb, uint8_t *image_buf
                    sys?'s':' ', 
                    arch?'a':' ');
         printf ("********Discrepancy: %i metadata clusters != %i FAT clusters\n", (size + 511)/512, count);
-    }
+    //}
     }
     return followclust;
 }
@@ -233,7 +249,7 @@ void traverse_root(uint8_t *image_buf, struct bpb33* bpb)
 
         dirent++;
     }
-	find_orphan(dirent, image_buf, bpb);
+    find_orphan(dirent, image_buf, bpb);
 }
 
 int main(int argc, char** argv) {
@@ -254,7 +270,7 @@ int main(int argc, char** argv) {
     // 2) Traverse Through Data Area:
     //      a) Make sure everything has a proper labeling
     traverse_root(image_buf, bpb);
-	printf("Done!\n");
+    printf("Done!\n");
     fflush(stdout);
     //print_cc();
 
