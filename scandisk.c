@@ -23,6 +23,45 @@ static int id = 0;
 #define FIND_FILE 0
 #define FIND_DIR 1
 
+int is_file(struct direntry *dirent, int indent) {
+	int is_file = 0;
+	char name[9];
+	name[8] = ' ';
+	memcpy(name, &(dirent->deName[0]), 8);
+	
+	if (name[0] == SLOT_EMPTY) {
+		return is_file;
+	}
+	// skip over deleted entries
+	if (((uint8_t)name[0]) == SLOT_DELETED) {
+		return is_file;
+	}
+	if (((uint8_t)name[0]) == 0x2E) {
+		// dot entry ("." or "..")
+		// skip it
+		return is_file;
+	}
+	if ((dirent->deAttributes & ATTR_WIN95LFN) == ATTR_WIN95LFN) {
+		// ignore any long file name extension entries
+		//
+		// printf("Win95 long-filename entry seq 0x%0x\n", dirent->deName[0]);
+    }
+    else if ((dirent->deAttributes & ATTR_VOLUME) != 0) {
+		
+    } 
+    else if ((dirent->deAttributes & ATTR_DIRECTORY) != 0) {
+       
+    }
+    else {
+    	/*
+    	 * a "regular" file entry
+    	 * print attributes, size, starting cluster, etc.
+    	 */
+    	 is_file = 1;
+    }
+    return is_file;
+}
+
 void get_name(char *fullname, struct direntry *dirent) 
 {
     char name[9];
@@ -427,26 +466,31 @@ void fix_orphan(int start_orphan, uint8_t *image_buf, struct bpb33* bpb, int cou
     strcat(orphan_file, ".dat");
 
     int size_of_orphan_cluster = count_clusters(start_orphan, image_buf, bpb);
-	printf("Found orphan of size: %i\n", size_of_orphan_cluster);
+	printf("Found orphan at cluster: %i with size: %i\n",start_orphan, size_of_orphan_cluster);
 
     uint16_t cluster = 0;
     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
-    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512);
+    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster); //i don't think this is the right file size?
     id++;
-    //cc[orphan] = id;
+    cc[start_orphan] = id;
     return;
 }
 
 int find_orphan(uint8_t *image_buf, struct bpb33* bpb){
     int count=0;
-    for (int i = 3 ; i<2848; i++){ // for each cluster
+    uint16_t cluster = 0;
+    struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
+
+    for (int i = 5; i<2848; i++){ // for each cluster 2848
         if (cc[i]==0){
-			if (get_fat_entry(i,image_buf,bpb)==(FAT12_MASK&CLUST_BAD)){
+			int fat_entry = get_fat_entry(i,image_buf,bpb);
+			if (fat_entry==(FAT12_MASK&CLUST_BAD)){
 				set_fat_entry(i,(FAT12_MASK & CLUST_EOFS),image_buf,bpb);
 				printf("Errorrrrr...\n");
 			}
-            if (get_fat_entry(i, image_buf, bpb)!=(FAT12_MASK & CLUST_FREE)){
-                printf("orphan found: %i\n", i);
+            if (is_valid_cluster(fat_entry,bpb)|| is_end_of_file(fat_entry)) {
+			//if (fat_entry!= (FAT12_MASK&CLUST_FREE)){
+                //printf("orphan found: %i, %i\n",i ,fat_entry);
 			
                 fix_orphan(i, image_buf, bpb, count);
                 count++;
@@ -466,6 +510,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
     uint16_t prev_fat = start_cluster;
     int count = 1;
 
+
     while (!(is_end_of_file(fat_entry))){
         //this bad entry thing might not even work!!!
         if (fat_entry == (FAT12_MASK & CLUST_BAD)){
@@ -477,17 +522,16 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
 
             //unlink the previous entry with this entry.
             if (count==size){
-                printf("Found something tooo big!\n");
+                printf("Found something tooo big:\n");
                 fflush(stdout);
-                set_fat_entry(prev_fat, FAT12_MASK&CLUST_EOFS, image_buf, bpb);
+                set_fat_entry(prev_fat, (FAT12_MASK&CLUST_EOFS), image_buf, bpb);
                 assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFS));
 				cc[prev_fat] = id;
             }
 
             //set the current cluster to free
-            set_fat_entry(fat_entry, FAT12_MASK&CLUST_FREE, image_buf, bpb);
+            set_fat_entry(fat_entry, (FAT12_MASK&CLUST_FREE), image_buf, bpb);
             assert(get_fat_entry(fat_entry, image_buf, bpb)==0);
-            printf("Fixed!\n");
             //prev_fat = fat_entry;
             fat_entry = tmp;
             count++;
@@ -503,10 +547,8 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
     }
     //count++;
     if (size>count){
-        printf("Metadata is bigger than cluster data -- adjusting metadata\n");
+        printf("Metadata is bigger than cluster data: \n");
         putulong(dirent->deFileSize, count*512);
-        printf("Should be fixed now\n");
-
     }
 	cc[prev_fat]=id;
     return count;
@@ -586,7 +628,9 @@ uint16_t build_cc(struct direntry *dirent, struct bpb33 *bpb, uint8_t *image_buf
                    sys?'s':' ', 
                    arch?'a':' ');
         printf ("********Discrepancy: %i metadata clusters != %i FAT clusters\n", (size + 511)/512, count);
+		printf("Should be Fixed Now!\n");
     }
+            
     }
     return followclust;
 }
@@ -659,7 +703,6 @@ int main(int argc, char** argv) {
     //print_cc();
 
     unmmap_file(image_buf, &fd);
-	printf("3: %i, 4: %i, 2800:%i \n", cc[3], cc[4], cc[2800]);
     return 0;
 
 }
