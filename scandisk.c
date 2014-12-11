@@ -28,17 +28,22 @@ void fix_orphan(int start_cluster, struct direntry *dirent, uint8_t *image_buf, 
     // make a new file in root
     // creates if not there, otherwise opens it
 
+    //printf("fix orphan called\n");
+
     FILE *fp = fopen("dumpster.dat", "w+");
     printf("start cluster:%i\n", start_cluster);
 
-    uint16_t cluster = get_fat_entry(start_cluster, image_buf, bpb);
+    // in dos_ls, line 41: cluster = get_fat_entry(cluster, image_buf, bpb);
+    // except this is not a cluster.
+
+    uint8_t* cluster = cluster_to_addr(start_cluster, image_buf, bpb);
 
     if (fp == NULL) {
         fprintf(stderr, "Can't open dumpster file\n");
         exit(1);
     }
     
-    fprintf(fp, "start cluster: %c\n", cluster);
+    fprintf(fp, "start cluster: %c\n", *cluster);
 
     id++;
     cc[start_cluster] = id;
@@ -249,7 +254,7 @@ void traverse_root(uint8_t *image_buf, struct bpb33* bpb)
 
         dirent++;
     }
-    //find_orphan(dirent, image_buf, bpb);
+    find_orphan(dirent, image_buf, bpb);
 }
 
 int main(int argc, char** argv) {
