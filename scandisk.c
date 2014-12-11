@@ -393,32 +393,68 @@ void usage(char *progname) {
     exit(1);
 }
 
-void fix_orphan(int orphan, struct direntry *orphan_dirent, uint8_t *image_buf, struct bpb33* bpb){
-    char* orphan_file = ("found1.dat");
+int count_clusters(int start_orphan, uint8_t *image_buf, struct bpb33* bpb){
+    id++;
+    uint16_t fat_entry = get_fat_entry(start_orphan, image_buf, bpb);
+    uint16_t prev_fat = start_orphan;
 
-    int size_of_orphan_cluster = traverse_fat(orphan_dirent, image_buf, bpb);
+    int count = 1;
+
+    while (!(is_end_of_file(fat_entry))){
+		printf("%i\n", fat_entry);
+        //this bad entry thing might not even work!!!
+        if (fat_entry == (FAT12_MASK & CLUST_BAD)){
+            printf("Defect in cluster \n");
+            cc[prev_fat] = -1;
+        }
+        else{
+			cc[prev_fat] = id;
+		}
+        prev_fat = fat_entry;
+        fat_entry = get_fat_entry(fat_entry, image_buf, bpb);
+        count ++;
+    }
+	cc[prev_fat]=id;
+    return count;
+}
+
+void fix_orphan(int start_orphan, uint8_t *image_buf, struct bpb33* bpb, int count){
+	char str[32];
+	char orphan_file[32];
+	sprintf(str, "%d",count );
+  	strcpy(orphan_file, "found");
+    strcat(orphan_file, str);
+    strcat(orphan_file, ".dat");
+
+    int size_of_orphan_cluster = count_clusters(start_orphan, image_buf, bpb);
+	printf("Found orphan of size: %i\n", size_of_orphan_cluster);
 
     uint16_t cluster = 0;
     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
-    write_dirent(dirent, orphan_file, orphan, size_of_orphan_cluster);
+    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512);
     id++;
-    cc[orphan] = id;
+    //cc[orphan] = id;
     return;
 }
 
-void find_orphan(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
+int find_orphan(uint8_t *image_buf, struct bpb33* bpb){
     int count=0;
-    for (int i = 2 ; i<2848; i++){ // for each cluster
+    for (int i = 3 ; i<2848; i++){ // for each cluster
         if (cc[i]==0){
-            if (get_fat_entry(i, image_buf, bpb)!=0){
-
+			if (get_fat_entry(i,image_buf,bpb)==(FAT12_MASK&CLUST_BAD)){
+				set_fat_entry(i,(FAT12_MASK & CLUST_EOFS),image_buf,bpb);
+				printf("Errorrrrr...\n");
+			}
+            if (get_fat_entry(i, image_buf, bpb)!=(FAT12_MASK & CLUST_FREE)){
                 printf("orphan found: %i\n", i);
-                fix_orphan(i, dirent, image_buf, bpb);
+			
+                fix_orphan(i, image_buf, bpb, count);
                 count++;
 
             }
         }
     }
+	return count;
 }
 
 int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb){
@@ -427,14 +463,14 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
     uint32_t size = getulong(dirent->deFileSize);
     size = ((size+511)/512);
     uint16_t fat_entry = get_fat_entry(start_cluster, image_buf, bpb);
-    uint16_t prev_fat = fat_entry;
+    uint16_t prev_fat = start_cluster;
     int count = 1;
 
     while (!(is_end_of_file(fat_entry))){
         //this bad entry thing might not even work!!!
         if (fat_entry == (FAT12_MASK & CLUST_BAD)){
             printf("Defect in cluster %i\n", count);
-            cc[fat_entry] = -1;
+            cc[prev_fat] = -1;
         }
         if (count >= size){
             uint16_t tmp = get_fat_entry(fat_entry, image_buf, bpb);
@@ -445,6 +481,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
                 fflush(stdout);
                 set_fat_entry(prev_fat, FAT12_MASK&CLUST_EOFS, image_buf, bpb);
                 assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFS));
+				cc[prev_fat] = id;
             }
 
             //set the current cluster to free
@@ -458,7 +495,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         }
         else {
             //go to next entry
-            cc[fat_entry] = id;
+            cc[prev_fat] = id;
             prev_fat = fat_entry;
             fat_entry = get_fat_entry(fat_entry, image_buf, bpb);
             count ++;
@@ -471,6 +508,7 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         printf("Should be fixed now\n");
 
     }
+	cc[prev_fat]=id;
     return count;
 }
 
@@ -613,13 +651,15 @@ int main(int argc, char** argv) {
 
     // set up
     uint16_t cluster = 0;
-    struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
-    //find_orphan(dirent, image_buf, bpb);
+    //struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
+    find_orphan(image_buf, bpb);
 
     printf("Done!\n");
     fflush(stdout);
     //print_cc();
 
     unmmap_file(image_buf, &fd);
+	printf("3: %i, 4: %i, 2800:%i \n", cc[3], cc[4], cc[2800]);
     return 0;
+
 }
