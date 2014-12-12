@@ -62,8 +62,7 @@ int is_file(struct direntry *dirent, int indent) {
     return is_file;
 }
 
-void get_name(char *fullname, struct direntry *dirent) 
-{
+void get_name(char *fullname, struct direntry *dirent) {
     char name[9];
     char extension[4];
     int i;
@@ -460,17 +459,26 @@ int count_clusters(int start_orphan, uint8_t *image_buf, struct bpb33* bpb){
 void fix_orphan(int start_orphan, uint8_t *image_buf, struct bpb33* bpb, int count){
 	char str[32];
 	char orphan_file[32];
-	sprintf(str, "%d",count );
+	sprintf(str, "%d",count);
   	strcpy(orphan_file, "found");
     strcat(orphan_file, str);
     strcat(orphan_file, ".dat");
 
     int size_of_orphan_cluster = count_clusters(start_orphan, image_buf, bpb);
-	printf("Found orphan at cluster: %i with size: %i\n",start_orphan, size_of_orphan_cluster);
+	//printf("Found orphan at cluster: %i with size: %i\n",start_orphan, size_of_orphan_cluster);
 
-    uint16_t cluster = 0;
+    printf(str);
+    printf("\n");
+
+    //uint8_t root_dir = root_dir_addr(image_buf, bpb);
+    uint16_t cluster = 0; // should be free cluster number
+
     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
-    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512); //i don't think this is the right file size?
+
+    create_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512, image_buf, bpb);
+
+    //write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512); //i don't think this is the right file size?
+    
     id++;
     cc[start_orphan] = id;
     return;
@@ -676,6 +684,24 @@ void traverse_root(uint8_t *image_buf, struct bpb33* bpb)
     }
     
 }
+
+// uint8_t* find_free_root_dir(uint8_t *image_buf, struct bpb33* bpb)
+// {
+//     uint16_t cluster = 0;
+
+//     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
+    
+//     for (int i = 0; i < bpb->bpbRootDirEnts; i++)
+//     {
+//         // uint16_t followclust = build_cc(dirent, bpb, image_buf);
+
+//         // if (is_valid_cluster(followclust, bpb))
+//         //     follow_dir(followclust, image_buf, bpb);
+
+//         // dirent++;
+//     }
+// }
+
 
 int main(int argc, char** argv) {
     uint8_t *image_buf;
