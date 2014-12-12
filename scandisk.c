@@ -440,10 +440,10 @@ int count_clusters(int start_orphan, uint8_t *image_buf, struct bpb33* bpb){
     int count = 1;
 
     while (!(is_end_of_file(fat_entry))){
-		printf("%i\n", fat_entry);
+		//printf("%i\n", fat_entry);
         //this bad entry thing might not even work!!!
         if (fat_entry == (FAT12_MASK & CLUST_BAD)){
-            printf("Defect in cluster \n");
+            printf("Defect in cluster %i\n", prev_fat);
             cc[prev_fat] = -1;
         }
         else{
@@ -470,7 +470,7 @@ void fix_orphan(int start_orphan, uint8_t *image_buf, struct bpb33* bpb, int cou
 
     uint16_t cluster = 0;
     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
-    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster); //i don't think this is the right file size?
+    write_dirent(dirent, orphan_file, start_orphan, size_of_orphan_cluster*512); //i don't think this is the right file size?
     id++;
     cc[start_orphan] = id;
     return;
@@ -481,7 +481,7 @@ int find_orphan(uint8_t *image_buf, struct bpb33* bpb){
     uint16_t cluster = 0;
     struct direntry *dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
 
-    for (int i = 5; i<2848; i++){ // for each cluster 2848
+    for (int i = 5; i<2848; i++){ // for each cluster 2848, we never go through 0-4 from the directory search?
         if (cc[i]==0){
 			int fat_entry = get_fat_entry(i,image_buf,bpb);
 			if (fat_entry==(FAT12_MASK&CLUST_BAD)){
@@ -494,6 +494,7 @@ int find_orphan(uint8_t *image_buf, struct bpb33* bpb){
 			
                 fix_orphan(i, image_buf, bpb, count);
                 count++;
+				printf("Should be fixed now\n");
 
             }
         }
@@ -516,13 +517,15 @@ int traverse_fat(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb)
         if (fat_entry == (FAT12_MASK & CLUST_BAD)){
             printf("Defect in cluster %i\n", count);
             cc[prev_fat] = -1;
+			set_fat_entry(fat_entry,(FAT12_MASK&CLUST_EOFS), image_buf, bpb);
+			return count;
         }
         if (count >= size){
             uint16_t tmp = get_fat_entry(fat_entry, image_buf, bpb);
 
             //unlink the previous entry with this entry.
             if (count==size){
-                printf("Found something tooo big:\n");
+                printf("FAT tooo big:\n");
                 fflush(stdout);
                 set_fat_entry(prev_fat, (FAT12_MASK&CLUST_EOFS), image_buf, bpb);
                 assert(get_fat_entry(prev_fat,image_buf,bpb)==(FAT12_MASK&CLUST_EOFS));
